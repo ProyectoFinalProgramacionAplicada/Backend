@@ -15,11 +15,13 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Configurar DbContext (ajusta tu cadena de conexión)
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"),
+        sqlOptions => sqlOptions.UseNetTopologySuite()));
 
 // Registrar servicios personalizados
 builder.Services.AddScoped<IJwtService, JwtService>();
 builder.Services.AddScoped<IPasswordHasher, BcryptPasswordHasher>();
+builder.Services.AddScoped<IGeoService, GeoService>();
 
 // Registrar servicio BinanceP2PService para inyección de dependencias
 builder.Services.AddSingleton<BinanceP2PService>();

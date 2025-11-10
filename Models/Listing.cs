@@ -1,7 +1,10 @@
 namespace TruekAppAPI.Models;
+using NetTopologySuite.Geometries;
 
 public class Listing : BaseEntity
 {
+    public int Id { get; set; }
+    public Point Location { get; set; }
     public int OwnerUserId { get; set; }
     public User OwnerUser { get; set; } = default!;
     public string Title { get; set; } = default!;
