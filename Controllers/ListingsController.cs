@@ -90,6 +90,35 @@ public class ListingsController(AppDbContext db, IGeoService geoService) : Contr
 
         return Ok(nearbyListings);
     }
+    
+    // --- AÑADIR ESTE NUEVO ENDPOINT ---
+    [HttpGet("{id}")]
+    [AllowAnonymous]
+    public async Task<ActionResult<ListingDto>> GetListingById(int id)
+    {
+        var listing = await db.Listings
+            .Include(l => l.OwnerUser) // Incluimos al propietario
+            .Where(l => l.Id == id && l.IsPublished)
+            .Select(l => new ListingDto
+            {
+                Id = l.Id,
+                Title = l.Title,
+                Description = l.Description, // Mapeamos el nuevo campo
+                TrueCoinValue = l.TrueCoinValue,
+                ImageUrl = l.ImageUrl,
+                IsPublished = l.IsPublished,
+                Latitude = l.Location.Y,
+                Longitude = l.Location.X,
+                OwnerUserId = l.OwnerUserId, // Mapeamos el ID del dueño
+                OwnerName = l.OwnerUser.DisplayName // Mapeamos el nombre del dueño
+            })
+            .FirstOrDefaultAsync();
+
+        if (listing == null) return NotFound("Publicación no encontrada.");
+
+        return Ok(listing);
+    }
+    // --- FIN DEL NUEVO ENDPOINT ---
 
     [HttpPost]
     [Authorize]
