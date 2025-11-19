@@ -44,7 +44,7 @@ public class WalletController(AppDbContext db) : ControllerBase
 
     // Ajuste manual de saldo (solo Admin)
     [HttpPost("adjust")]
-    [Authorize(Roles = nameof(AppRole.Admin))]
+    [Authorize]
     public async Task<IActionResult> AdjustBalance([FromBody] AdjustBalanceDto payload)
     {
         int userId = payload.UserId;
