@@ -9,4 +9,7 @@ public class UserInfoDto
     public AppRole Role { get; set; }
     public int? CompanyId { get; set; }
     public decimal TrueCoinBalance { get; set; }
+    public string? DisplayName { get; set; }
+    public string? Phone { get; set; }
+    public string? AvatarUrl { get; set; }
 }

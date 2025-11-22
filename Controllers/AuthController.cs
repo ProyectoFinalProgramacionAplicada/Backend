@@ -76,7 +76,10 @@ namespace TruekAppAPI.Controllers
                 Email = user.Email,
                 Role = user.Role,
                 CompanyId = user.CompanyId,
-                TrueCoinBalance = user.TrueCoinBalance
+                TrueCoinBalance = user.TrueCoinBalance,
+                DisplayName = user.DisplayName,
+                Phone = user.Phone,
+                AvatarUrl = user.AvatarUrl
                 // Agrega aquí otros campos si quieres
             };
         }
