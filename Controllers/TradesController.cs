@@ -21,6 +21,21 @@ public class TradesController(AppDbContext db) : ControllerBase
             .FirstOrDefaultAsync(l => l.Id == dto.TargetListingId);
         if (targetListing == null) return NotFound("Publicación no encontrada.");
 
+// ✅ No permitir trades consigo mismo
+        if (requesterId == targetListing.OwnerUserId)
+            return BadRequest("No puedes hacer una oferta sobre tu propia publicación.");
+
+// ✅ Evitar trades duplicados
+        var existingTrade = await db.Trades
+            .FirstOrDefaultAsync(t =>
+                t.RequesterUserId == requesterId &&
+                t.OwnerUserId == targetListing.OwnerUserId &&
+                t.TargetListingId == targetListing.Id &&
+                (t.Status == TradeStatus.Pending || t.Status == TradeStatus.Accepted));
+
+        if (existingTrade != null)
+            return Ok(existingTrade); // ya existe, devolvemos el trade
+
         var trade = new Trade
         {
             RequesterUserId = requesterId,
@@ -35,6 +50,19 @@ public class TradesController(AppDbContext db) : ControllerBase
 
         db.Trades.Add(trade);
         await db.SaveChangesAsync();
+
+        if (!string.IsNullOrWhiteSpace(dto.Message))
+        {
+            var message = new TradeMessage
+            {
+                TradeId = trade.Id,
+                SenderUserId = requesterId,
+                Text = dto.Message,
+                CreatedAt = DateTime.UtcNow
+            };
+            db.TradeMessages.Add(message);
+            await db.SaveChangesAsync();
+        }
 
         return CreatedAtAction(nameof(CreateTrade), new { trade.Id }, trade);
     }
@@ -172,12 +200,22 @@ public class TradesController(AppDbContext db) : ControllerBase
         var trade = await db.Trades.FindAsync(id);
         if (trade == null) return NotFound();
 
+        var lastMessage = await db.TradeMessages
+            .Where(m => m.TradeId == id && m.SenderUserId == userId)
+            .OrderByDescending(m => m.CreatedAt)
+            .FirstOrDefaultAsync();
+
+        if (lastMessage != null && (DateTime.UtcNow - lastMessage.CreatedAt).TotalSeconds < 5)
+            return BadRequest("No puedes enviar mensajes idénticos tan seguido.");
+
         var message = new TradeMessage
         {
             TradeId = id,
             SenderUserId = userId,
-            Text = text
+            Text = text,
+            CreatedAt = DateTime.UtcNow
         };
+
 
         db.TradeMessages.Add(message);
         await db.SaveChangesAsync();
