@@ -41,7 +41,9 @@ public class ReviewsController(AppDbContext db) : ControllerBase
     public async Task<ActionResult<IEnumerable<UserReviewDto>>> GetReviews(int userId)
     {
         var reviews = await db.UserReviews
+            .Include(r => r.FromUser) // <--- IMPORTANTE: Cargar la relación
             .Where(r => r.ToUserId == userId)
+            .OrderByDescending(r => r.CreatedAt) // Las más recientes primero
             .Select(r => new UserReviewDto
             {
                 Id = r.Id,
@@ -49,7 +51,11 @@ public class ReviewsController(AppDbContext db) : ControllerBase
                 ToUserId = r.ToUserId,
                 Rating = r.Rating,
                 Comment = r.Comment,
-                CreatedAt = r.CreatedAt
+                CreatedAt = r.CreatedAt,
+                
+                // --- MAPEO NUEVO ---
+                FromUserName = r.FromUser.DisplayName ?? "Usuario",
+                FromUserAvatarUrl = r.FromUser.AvatarUrl
             }).ToListAsync();
 
         return Ok(reviews);

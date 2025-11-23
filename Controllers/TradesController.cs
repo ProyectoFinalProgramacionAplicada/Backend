@@ -47,35 +47,21 @@ public class TradesController(AppDbContext db) : ControllerBase
         var trade = await db.Trades
             .FirstOrDefaultAsync(t => t.Id == id);
 
-        if (trade == null)
-            return NotFound("Trueque no encontrado.");
+        if (trade == null) return NotFound("Trueque no encontrado.");
 
-        // Solo el usuario que creó el trueque puede editarlo
-        if (trade.RequesterUserId != userId)
-            return Forbid();
+        if (trade.RequesterUserId != userId) return Forbid();
+        if (trade.Status != TradeStatus.Pending) return BadRequest("Solo se pueden editar trueques pendientes.");
 
-        // Solo se permite actualizar mientras esté pendiente
-        if (trade.Status != TradeStatus.Pending)
-            return BadRequest("Solo se pueden editar trueques pendientes.");
+        var targetListing = await db.Listings.FirstOrDefaultAsync(l => l.Id == dto.TargetListingId);
+        if (targetListing == null) return NotFound("Publicación objetivo no encontrada.");
 
-        // Validar que la nueva publicación objetivo exista
-        var targetListing = await db.Listings
-            .FirstOrDefaultAsync(l => l.Id == dto.TargetListingId);
-
-        if (targetListing == null)
-            return NotFound("Publicación objetivo no encontrada.");
-
-        // Actualizar campos
         trade.OfferedListingId = dto.OfferedListingId;
         trade.TargetListingId = dto.TargetListingId;
         trade.Message = dto.Message ?? trade.Message;
-
-        // Actualizar campos de TrueCoins
         trade.OfferedTrueCoins = dto.OfferedTrueCoins;
         trade.RequestedTrueCoins = dto.RequestedTrueCoins;
 
         await db.SaveChangesAsync();
-
         return NoContent();
     }
 
@@ -106,25 +92,64 @@ public class TradesController(AppDbContext db) : ControllerBase
         return NoContent();
     }
 
+    // --- NUEVO ENDPOINT: COMPLETAR TRUEQUE ---
+    [HttpPost("{id}/complete")]
+    public async Task<IActionResult> CompleteTrade(int id)
+    {
+        var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+        // Traemos el trade y el listing para poder marcarlo como no disponible
+        var trade = await db.Trades
+            .Include(t => t.TargetListing)
+            .FirstOrDefaultAsync(t => t.Id == id);
+
+        if (trade == null) return NotFound("Trueque no encontrado.");
+
+        // SEGURIDAD: Solo el dueño del producto (Vendedor) puede finalizar
+        if (trade.OwnerUserId != userId)
+        {
+            return Forbid("Solo el dueño del producto puede finalizar el trueque.");
+        }
+
+        if (trade.Status == TradeStatus.Completed)
+            return BadRequest("Este trueque ya está finalizado.");
+
+        // LÓGICA DE FINALIZACIÓN
+        trade.Status = TradeStatus.Completed;
+        
+        // Sacar el producto del mercado
+        if (trade.TargetListing != null)
+        {
+            trade.TargetListing.IsAvailable = false;
+            trade.TargetListing.IsPublished = false;
+        }
+
+        // Opcional: Cancelar otros trades pendientes de este producto
+        var otherTrades = await db.Trades
+            .Where(t => t.TargetListingId == trade.TargetListingId && t.Id != trade.Id && t.Status == TradeStatus.Pending)
+            .ToListAsync();
+        
+        foreach (var other in otherTrades)
+        {
+            other.Status = TradeStatus.Cancelled;
+        }
+
+        await db.SaveChangesAsync();
+        return Ok(new { message = "Trueque finalizado con éxito." });
+    }
+
     [HttpGet("{id}/messages")]
     public async Task<IActionResult> GetMessages(int id)
     {
         var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-
-        // Buscar el trade junto con sus mensajes y los usuarios remitentes
         var trade = await db.Trades
             .Include(t => t.Messages)
             .ThenInclude(m => m.SenderUser)
             .FirstOrDefaultAsync(t => t.Id == id);
 
-        if (trade == null)
-            return NotFound();
+        if (trade == null) return NotFound();
+        if (trade.OwnerUserId != userId && trade.RequesterUserId != userId) return Forbid();
 
-        // Solo los usuarios involucrados pueden ver los mensajes
-        if (trade.OwnerUserId != userId && trade.RequesterUserId != userId)
-            return Forbid();
-
-        // Mapeo a un formato limpio
         var messages = trade.Messages
             .OrderBy(m => m.CreatedAt)
             .Select(m => new
@@ -139,7 +164,6 @@ public class TradesController(AppDbContext db) : ControllerBase
 
         return Ok(messages);
     }
-
 
     [HttpPost("{id}/messages")]
     public async Task<IActionResult> SendMessage(int id, [FromBody] string text)
@@ -160,7 +184,6 @@ public class TradesController(AppDbContext db) : ControllerBase
         return CreatedAtAction(nameof(SendMessage), new { message.Id }, message);
     }
 
-    // Obtener todos los trueques del usuario autenticado
     [HttpGet("my")]
     public async Task<ActionResult<IEnumerable<TradeDto>>> GetMyTrades()
     {
@@ -180,7 +203,11 @@ public class TradesController(AppDbContext db) : ControllerBase
                 Message = t.Message,
                 CreatedAt = t.CreatedAt,
                 OfferedTrueCoins = t.OfferedTrueCoins,
-                RequestedTrueCoins = t.RequestedTrueCoins
+                RequestedTrueCoins = t.RequestedTrueCoins,
+                
+                // --- AQUÍ ESTÁ EL MAPEO QUE NECESITABAS ---
+                ListingOwnerId = t.OwnerUserId,       // El dueño del producto es el OwnerUserId
+                InitiatorUserId = t.RequesterUserId   // El comprador es el RequesterUserId
             })
             .ToListAsync();
 
