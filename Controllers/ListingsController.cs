@@ -52,11 +52,21 @@ public class ListingsController(
         {
             Id = l.Id,
             Title = l.Title,
+            Description = l.Description,
             TrueCoinValue = l.TrueCoinValue,
             ImageUrl = l.ImageUrl,
             IsPublished = l.IsPublished,
-            Latitude = l.Location.Y, 
-            Longitude = l.Location.X
+            Latitude = l.Location.Y,
+            Longitude = l.Location.X,
+    
+            // Mapeo del Vendedor
+            OwnerUserId = l.OwnerUserId,
+            OwnerName = l.OwnerUser.DisplayName,
+            OwnerAvatarUrl = l.OwnerUser.AvatarUrl, // <--- Mapeamos la URL
+            OwnerRating = db.UserReviews
+                .Where(r => r.ToUserId == l.OwnerUserId)
+                .Select(r => (double?)r.Rating) // Cast a nullable para evitar excepción si está vacío
+                .Average() ?? 0.0 // Si es null (sin reviews), devuelve 0.0
         }).ToListAsync();
 
         return Ok(result);
@@ -107,8 +117,15 @@ public class ListingsController(
                 IsPublished = l.IsPublished,
                 Latitude = l.Location.Y,
                 Longitude = l.Location.X,
+    
+                // Mapeo del Vendedor
                 OwnerUserId = l.OwnerUserId,
-                OwnerName = l.OwnerUser.DisplayName
+                OwnerName = l.OwnerUser.DisplayName,
+                OwnerAvatarUrl = l.OwnerUser.AvatarUrl, // <--- Mapeamos la URL
+                OwnerRating = db.UserReviews
+                    .Where(r => r.ToUserId == l.OwnerUserId)
+                    .Select(r => (double?)r.Rating) // Cast a nullable para evitar excepción si está vacío
+                    .Average() ?? 0.0 // Si es null (sin reviews), devuelve 0.0
             })
             .FirstOrDefaultAsync();
 

@@ -12,8 +12,8 @@ public class TradeDto
     public TradeStatus Status { get; set; }
     public string? Message { get; set; }
     public DateTime CreatedAt { get; set; }
-
-    // Nuevos campos para TrueCoins
     public double? OfferedTrueCoins { get; set; }
     public double? RequestedTrueCoins { get; set; }
+    public int ListingOwnerId { get; set; } // Para saber si soy el Vendedor
+    public int InitiatorUserId { get; set; } // Para saber si soy el Comprador
 }

@@ -8,4 +8,6 @@ public class UserReviewDto
     public int Rating { get; set; }
     public string? Comment { get; set; }
     public DateTime CreatedAt { get; set; }
+    public string? FromUserName { get; set; }
+    public string? FromUserAvatarUrl { get; set; }
 }
