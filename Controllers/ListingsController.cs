@@ -170,6 +170,8 @@ public class ListingsController(
             Title = dto.Title,
             Description = dto.Description,
             TrueCoinValue = dto.TrueCoinValue,
+            Lat = dto.Latitude,
+            Lng = dto.Longitude,
             
             // MODIFICADO: Usamos la URL devuelta por el servicio de almacenamiento
             ImageUrl = imageUrl, 
