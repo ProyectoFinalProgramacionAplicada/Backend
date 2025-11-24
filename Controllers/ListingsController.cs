@@ -77,11 +77,19 @@ public class ListingsController(
     public async Task<ActionResult<IEnumerable<ListingDto>>> GetNearbyListings(
         [FromQuery] double latitude, 
         [FromQuery] double longitude, 
-        [FromQuery] double radiusInKm = 5)
+        [FromQuery] double radiusInKm = 25)
     {
+        // Validar parámetros
+        if (latitude < -90 || latitude > 90)
+            return BadRequest("Latitud inválida.");
+        if (longitude < -180 || longitude > 180)
+            return BadRequest("Longitud inválida.");
+        if (radiusInKm <= 0 || radiusInKm > 100)
+            return BadRequest("El radio debe estar entre 1 y 100 km.");
+    
         var userLocation = geoService.CreatePoint(latitude, longitude);
         var radiusInMeters = radiusInKm * 1000;
-
+    
         var nearbyListings = await db.Listings
             .Where(l => l.IsPublished && l.IsAvailable)
             .Where(l => l.Location.IsWithinDistance(userLocation, radiusInMeters)) 
@@ -96,9 +104,10 @@ public class ListingsController(
                 Longitude = l.Location.X
             })
             .ToListAsync();
-
+    
         return Ok(nearbyListings);
     }
+
     
     [HttpGet("{id}")]
     [AllowAnonymous]
