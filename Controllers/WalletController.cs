@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using TruekAppAPI.Data;
 using TruekAppAPI.DTO.Wallet;
 using TruekAppAPI.Models;
+using TruekAppAPI.Services;
 using System.Security.Claims;
 
 namespace TruekAppAPI.Controllers;
@@ -11,17 +12,29 @@ namespace TruekAppAPI.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
-public class WalletController(AppDbContext db) : ControllerBase
+public class WalletController : ControllerBase
 {
-    // Obtener balance y últimos movimientos del usuario autenticado
+    private readonly AppDbContext _db;
+    private readonly IWalletService _walletService;
+
+    public WalletController(AppDbContext db, IWalletService walletService)
+    {
+        _db = db;
+        _walletService = walletService;
+    }
+
+    // ==========================================
+    // GET /api/Wallet/me
+    // Obtener balance y últimos movimientos
+    // ==========================================
     [HttpGet("me")]
     public async Task<ActionResult<WalletBalanceDto>> GetMyWallet()
     {
         var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-        var user = await db.Users.FindAsync(userId);
+        var user = await _db.Users.FindAsync(userId);
         if (user == null) return NotFound();
 
-        var entries = await db.WalletEntries
+        var entries = await _db.WalletEntries
             .Where(e => e.UserId == userId)
             .OrderByDescending(e => e.CreatedAt)
             .Take(20)
@@ -31,7 +44,8 @@ public class WalletController(AppDbContext db) : ControllerBase
                 Amount = e.Amount,
                 Type = e.Type,
                 CreatedAt = e.CreatedAt
-            }).ToListAsync();
+            })
+            .ToListAsync();
 
         var dto = new WalletBalanceDto
         {
@@ -42,16 +56,19 @@ public class WalletController(AppDbContext db) : ControllerBase
         return Ok(dto);
     }
 
-    // Ajuste manual de saldo (solo Admin)
+    // ==========================================
+    // POST /api/Wallet/adjust
+    // Ajuste manual de saldo (admin)
+    // ==========================================
     [HttpPost("adjust")]
-    [Authorize]
+    [Authorize] // aquí podrías poner [Authorize(Roles = "Admin")]
     public async Task<IActionResult> AdjustBalance([FromBody] AdjustBalanceDto payload)
     {
         int userId = payload.UserId;
         decimal amount = payload.Amount;
-        string reason = payload.Reason;
+        string? reason = payload.Reason;
 
-        var user = await db.Users.FindAsync(userId);
+        var user = await _db.Users.FindAsync(userId);
         if (user == null) return NotFound();
 
         user.TrueCoinBalance += amount;
@@ -61,14 +78,38 @@ public class WalletController(AppDbContext db) : ControllerBase
             UserId = userId,
             Amount = amount,
             Type = WalletEntryType.AdminAdjustment,
-            RefType = "AdminAdjustment",
+            RefType = reason ?? "AdminAdjustment",
             RefId = null
         };
 
-        db.WalletEntries.Add(entry);
-        await db.SaveChangesAsync();
+        _db.WalletEntries.Add(entry);
+        await _db.SaveChangesAsync();
 
         return NoContent();
     }
 
+    // ==========================================
+    // POST /api/Wallet/transfer
+    // Transferencia P2P interna de TrueCoins
+    // ==========================================
+    [HttpPost("transfer")]
+    public async Task<IActionResult> Transfer([FromBody] WalletTransferRequestDto payload)
+    {
+        if (payload.Amount <= 0)
+            return BadRequest("Amount must be greater than 0");
+
+        var fromUserId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+        // Nos aseguramos de usar decimal aunque el DTO viniera en double
+        decimal amount = (decimal)payload.Amount;
+
+        await _walletService.TransferAsync(
+            fromUserId,
+            payload.ToUserId,
+            amount,
+            payload.Reference
+        );
+
+        return NoContent();
+    }
 }

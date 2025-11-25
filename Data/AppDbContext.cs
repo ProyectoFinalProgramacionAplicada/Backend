@@ -17,6 +17,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<RewardRedemption> RewardRedemptions => Set<RewardRedemption>();
     public DbSet<Setting> Settings => Set<Setting>();
 
+    // ⭐ NUEVO: P2POrders
+    public DbSet<P2POrder> P2POrders => Set<P2POrder>();
+
+
     protected override void OnModelCreating(ModelBuilder b)
     {
         // Índices
@@ -25,20 +29,20 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         b.Entity<Listing>().HasIndex(x => x.IsPublished);
         b.Entity<Trade>().HasIndex(x => x.Status);
 
-        // --- 🔧 RELACIONES TRADE - USER ---
+        // --- 🔧 TRADE - USER ---
         b.Entity<Trade>()
             .HasOne(t => t.RequesterUser)
             .WithMany()
             .HasForeignKey(t => t.RequesterUserId)
-            .OnDelete(DeleteBehavior.Restrict); // evita cascada
+            .OnDelete(DeleteBehavior.Restrict);
 
         b.Entity<Trade>()
             .HasOne(t => t.OwnerUser)
             .WithMany()
             .HasForeignKey(t => t.OwnerUserId)
-            .OnDelete(DeleteBehavior.Restrict); // evita cascada
+            .OnDelete(DeleteBehavior.Restrict);
 
-        // --- 🔧 RELACIONES TRADE - LISTING ---
+        // --- 🔧 TRADE - LISTING ---
         b.Entity<Trade>()
             .HasOne(t => t.TargetListing)
             .WithMany()
@@ -50,8 +54,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .WithMany()
             .HasForeignKey(t => t.OfferedListingId)
             .OnDelete(DeleteBehavior.Restrict);
-        
-        // --- 🔧 RELACIONES USERREVIEWS ---
+
+        // --- 🔧 USERREVIEWS ---
         b.Entity<UserReview>()
             .HasOne(r => r.FromUser)
             .WithMany()
@@ -69,8 +73,26 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .WithMany()
             .HasForeignKey(r => r.TradeId)
             .OnDelete(DeleteBehavior.Cascade);
-        
-        // Si Setting no tiene clave primaria:
+
+        // --- ⭐ NUEVO: RELACIONES P2POrder ---
+        b.Entity<P2POrder>(entity =>
+        {
+            entity.HasKey(o => o.Id);
+
+            // Relación con el usuario creador
+            entity.HasOne(o => o.CreatorUser)
+                  .WithMany()              // No defines colección en User, así que WithMany() vacío
+                  .HasForeignKey(o => o.CreatorUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            // Relación con el usuario que toma la orden
+            entity.HasOne(o => o.CounterpartyUser)
+                  .WithMany()
+                  .HasForeignKey(o => o.CounterpartyUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // --- SETTINGS sin clave ---
         b.Entity<Setting>().HasNoKey();
 
         base.OnModelCreating(b);
