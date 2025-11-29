@@ -9,7 +9,7 @@ namespace TruekAppAPI.DTO.Auth
         public string DisplayName { get; set; } = string.Empty;
         
         [Required]
-        [RegularExpression(@"^\+[0-9]{1,3}\s?[0-9]{6,14}$", ErrorMessage = "El teléfono debe incluir código de país (ej. +591)")]
+        [RegularExpression(@"^\+[1-9]\d{6,14}$", ErrorMessage = "Phone number must be in E.164 format (e.g. +5917XXXXXXX, +1234567890)")]
         public string Phone { get; set; } = string.Empty;
     }
 }
