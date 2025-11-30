@@ -21,11 +21,11 @@ public class TradesController(AppDbContext db) : ControllerBase
             .FirstOrDefaultAsync(l => l.Id == dto.TargetListingId);
         if (targetListing == null) return NotFound("Publicación no encontrada.");
 
-// ✅ No permitir trades consigo mismo
+        // ✅ No permitir trades consigo mismo
         if (requesterId == targetListing.OwnerUserId)
             return BadRequest("No puedes hacer una oferta sobre tu propia publicación.");
 
-// ✅ Evitar trades duplicados
+        // ✅ Evitar trades duplicados
         var existingTrade = await db.Trades
             .FirstOrDefaultAsync(t =>
                 t.RequesterUserId == requesterId &&
@@ -34,7 +34,7 @@ public class TradesController(AppDbContext db) : ControllerBase
                 (t.Status == TradeStatus.Pending || t.Status == TradeStatus.Accepted));
 
         if (existingTrade != null)
-            return Ok(existingTrade); // ya existe, devolvemos el trade
+            return Ok(existingTrade);
 
         var trade = new Trade
         {
@@ -120,20 +120,22 @@ public class TradesController(AppDbContext db) : ControllerBase
         return NoContent();
     }
 
-    // --- NUEVO ENDPOINT: COMPLETAR TRUEQUE ---
+    // ==========================================
+    // POST /api/Trades/{id}/complete
+    // Completar trueque (solo el vendedor)
+    // ==========================================
     [HttpPost("{id}/complete")]
     public async Task<IActionResult> CompleteTrade(int id)
     {
         var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
-        // Traemos el trade y el listing para poder marcarlo como no disponible
+        // 🔧 CAMBIO: Usar 'db' en lugar de '_db'
         var trade = await db.Trades
             .Include(t => t.TargetListing)
             .FirstOrDefaultAsync(t => t.Id == id);
 
         if (trade == null) return NotFound("Trueque no encontrado.");
 
-        // SEGURIDAD: Solo el dueño del producto (Vendedor) puede finalizar
         if (trade.OwnerUserId != userId)
         {
             return Forbid("Solo el dueño del producto puede finalizar el trueque.");
@@ -142,17 +144,17 @@ public class TradesController(AppDbContext db) : ControllerBase
         if (trade.Status == TradeStatus.Completed)
             return BadRequest("Este trueque ya está finalizado.");
 
-        // LÓGICA DE FINALIZACIÓN
+        // ✅ LÓGICA DE FINALIZACIÓN
         trade.Status = TradeStatus.Completed;
+        trade.CompletedAt = DateTime.UtcNow; // 🆕 Registrar fecha de finalización
         
-        // Sacar el producto del mercado
         if (trade.TargetListing != null)
         {
             trade.TargetListing.IsAvailable = false;
             trade.TargetListing.IsPublished = false;
         }
 
-        // Opcional: Cancelar otros trades pendientes de este producto
+        // 🔧 CAMBIO: Usar 'db' en lugar de '_db'
         var otherTrades = await db.Trades
             .Where(t => t.TargetListingId == trade.TargetListingId && t.Id != trade.Id && t.Status == TradeStatus.Pending)
             .ToListAsync();
@@ -162,6 +164,7 @@ public class TradesController(AppDbContext db) : ControllerBase
             other.Status = TradeStatus.Cancelled;
         }
 
+        // 🔧 CAMBIO: Usar 'db' en lugar de '_db'
         await db.SaveChangesAsync();
         return Ok(new { message = "Trueque finalizado con éxito." });
     }
@@ -216,7 +219,6 @@ public class TradesController(AppDbContext db) : ControllerBase
             CreatedAt = DateTime.UtcNow
         };
 
-
         db.TradeMessages.Add(message);
         await db.SaveChangesAsync();
         return CreatedAtAction(nameof(SendMessage), new { message.Id }, message);
@@ -242,10 +244,8 @@ public class TradesController(AppDbContext db) : ControllerBase
                 CreatedAt = t.CreatedAt,
                 OfferedTrueCoins = t.OfferedTrueCoins,
                 RequestedTrueCoins = t.RequestedTrueCoins,
-                
-                // --- AQUÍ ESTÁ EL MAPEO QUE NECESITABAS ---
-                ListingOwnerId = t.OwnerUserId,       // El dueño del producto es el OwnerUserId
-                InitiatorUserId = t.RequesterUserId   // El comprador es el RequesterUserId
+                ListingOwnerId = t.OwnerUserId,
+                InitiatorUserId = t.RequesterUserId
             })
             .ToListAsync();
 

@@ -16,5 +16,6 @@ public class User : BaseEntity
     
     public string? PasswordResetToken { get; set; }
     public DateTime? PasswordResetTokenExpires { get; set; }
-
+    
+    public DateTime? LastLoginAt { get; set; }
 }

@@ -16,8 +16,8 @@ public class Trade : BaseEntity
     public double? ExchangeLat { get; set; }
     public double? ExchangeLng { get; set; }
     public ICollection<TradeMessage> Messages { get; set; } = [];
-
-    // NUEVOS CAMPOS para TrueCoins
     public double? OfferedTrueCoins { get; set; }   // TrueCoins que ofrece el solicitante para complementar
     public double? RequestedTrueCoins { get; set; } // TrueCoins que pide el solicitante para compensar diferencia
+    
+    public DateTime? CompletedAt { get; set; }
 }
