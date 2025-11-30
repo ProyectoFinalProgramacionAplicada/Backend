@@ -36,25 +36,41 @@ namespace TruekAppAPI.Controllers
                 Email = dto.Email,
                 PasswordHash = _passwordHasher.HashPassword(dto.Password),
                 Phone = dto.Phone,
+                DisplayName = dto.DisplayName, // ✅ NUEVO: Guardamos el nombre
                 Role = dto.Role
             };
 
             _db.Users.Add(user);
             await _db.SaveChangesAsync();
 
-            return CreatedAtAction(nameof(Register), new { user.Id }, new { user.Id, user.Email });
+            return CreatedAtAction(nameof(Register), new { user.Id }, new { user.Id, user.Email, user.DisplayName });
         }
 
         [HttpPost("login")]
         [AllowAnonymous]
-        public async Task<ActionResult<TokenDto>> Login(UserLoginDto dto)
+        public async Task<ActionResult<LoginResponseDto>> Login(UserLoginDto dto)
         {
             var user = await _db.Users.FirstOrDefaultAsync(x => x.Email == dto.Email);
             if (user == null || !_passwordHasher.VerifyPassword(user.PasswordHash, dto.Password))
                 return Unauthorized("Credenciales inválidas.");
 
             var token = _jwtService.GenerateToken(user);
-            return new TokenDto { Token = token };
+    
+            return new LoginResponseDto
+            {
+                Token = token,
+                User = new UserInfoDto
+                {
+                    Id = user.Id,
+                    Email = user.Email,
+                    Role = user.Role,
+                    CompanyId = user.CompanyId,
+                    TrueCoinBalance = user.TrueCoinBalance,
+                    DisplayName = user.DisplayName,
+                    Phone = user.Phone,
+                    AvatarUrl = user.AvatarUrl
+                }
+            };
         }
 
         [HttpGet("me")]
