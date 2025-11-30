@@ -13,4 +13,8 @@ public class User : BaseEntity
     public int? CompanyId { get; set; } = null!;
     public Company? Company { get; set; }
     public bool IsActive { get; set; } = true;
+    
+    public string? PasswordResetToken { get; set; }
+    public DateTime? PasswordResetTokenExpires { get; set; }
+
 }
