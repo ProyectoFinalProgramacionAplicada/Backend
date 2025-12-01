@@ -16,4 +16,6 @@ public class TradeDto
     public double? RequestedTrueCoins { get; set; }
     public int ListingOwnerId { get; set; } // Para saber si soy el Vendedor
     public int InitiatorUserId { get; set; } // Para saber si soy el Comprador
+    public string? RequesterAvatarUrl { get; set; }
+    public string? OwnerAvatarUrl { get; set; }
 }

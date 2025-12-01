@@ -128,7 +128,6 @@ app.UseCors("AllowAll");
 app.UseRouting();
 
 app.UseAuthentication();
-app.UseStaticFiles();
 app.UseAuthorization();
 
 app.MapControllers();

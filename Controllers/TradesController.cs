@@ -230,6 +230,7 @@ public class TradesController(AppDbContext db) : ControllerBase
         var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
         var trades = await db.Trades
+            // EF Core hace el join automáticamente al acceder a las propiedades de navegación en el Select
             .Where(t => t.RequesterUserId == userId || t.OwnerUserId == userId)
             .OrderByDescending(t => t.CreatedAt)
             .Select(t => new TradeDto
@@ -245,7 +246,11 @@ public class TradesController(AppDbContext db) : ControllerBase
                 OfferedTrueCoins = t.OfferedTrueCoins,
                 RequestedTrueCoins = t.RequestedTrueCoins,
                 ListingOwnerId = t.OwnerUserId,
-                InitiatorUserId = t.RequesterUserId
+                InitiatorUserId = t.RequesterUserId,
+            
+                // --- AGREGAR ESTAS ASIGNACIONES ---
+                RequesterAvatarUrl = t.RequesterUser.AvatarUrl,
+                OwnerAvatarUrl = t.OwnerUser.AvatarUrl
             })
             .ToListAsync();
 

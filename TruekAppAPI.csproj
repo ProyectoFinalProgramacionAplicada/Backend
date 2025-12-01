@@ -33,6 +33,18 @@
 
     <ItemGroup>
       <_ContentIncludedByDefault Remove="TruekAppBackend\Properties\launchSettings.json" />
+      <_ContentIncludedByDefault Remove="wwwroot\uploads\avatars\0c648e35-b0ad-4057-b3f4-79c263f34e67.png" />
+      <_ContentIncludedByDefault Remove="wwwroot\uploads\avatars\1951caeb-b0f2-49bb-83f9-4ebb5738f469.png" />
+      <_ContentIncludedByDefault Remove="wwwroot\uploads\avatars\5eb7b958-c376-4b53-9f0c-3bc0a53ae796.png" />
+      <_ContentIncludedByDefault Remove="wwwroot\uploads\avatars\8cab9901-c2e2-4f7f-a75d-4c29d6557d59.png" />
+      <_ContentIncludedByDefault Remove="wwwroot\uploads\avatars\a476a76a-ceb6-45e7-a1ce-164850af3509.png" />
+      <_ContentIncludedByDefault Remove="wwwroot\uploads\avatars\ece71b5b-c3b0-4961-ac94-d42df49f9329.png" />
+      <_ContentIncludedByDefault Remove="wwwroot\uploads\avatars\f5cdbd3b-e3ed-47df-8944-96393794c874.png" />
+      <_ContentIncludedByDefault Remove="wwwroot\uploads\avatars\f7f5f091-e56c-496c-9724-6d5b71596357.png" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Folder Include="wwwroot\" />
     </ItemGroup>
 
 </Project>
