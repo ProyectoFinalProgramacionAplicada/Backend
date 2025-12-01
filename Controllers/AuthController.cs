@@ -67,6 +67,10 @@ namespace TruekAppAPI.Controllers
             if (user == null || !_passwordHasher.VerifyPassword(user.PasswordHash, dto.Password))
                 return Unauthorized("Credenciales inválidas.");
 
+            // 🆕 Actualizar LastLoginAt
+            user.LastLoginAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+
             var token = _jwtService.GenerateToken(user);
 
             return new LoginResponseDto
