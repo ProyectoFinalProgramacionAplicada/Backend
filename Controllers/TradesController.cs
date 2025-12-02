@@ -250,7 +250,11 @@ public class TradesController(AppDbContext db) : ControllerBase
             
                 // --- AGREGAR ESTAS ASIGNACIONES ---
                 RequesterAvatarUrl = t.RequesterUser.AvatarUrl,
-                OwnerAvatarUrl = t.OwnerUser.AvatarUrl
+                OwnerAvatarUrl = t.OwnerUser.AvatarUrl,
+                RequesterName = t.RequesterUser.DisplayName,
+                OwnerName = t.OwnerUser.DisplayName,
+                ListingTitle = t.TargetListing.Title, 
+                ListingImageUrl = t.TargetListing.ImageUrl
             })
             .ToListAsync();
 

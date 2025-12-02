@@ -18,4 +18,8 @@ public class TradeDto
     public int InitiatorUserId { get; set; } // Para saber si soy el Comprador
     public string? RequesterAvatarUrl { get; set; }
     public string? OwnerAvatarUrl { get; set; }
+    public string? RequesterName { get; set; }
+    public string? OwnerName { get; set; } 
+    public string? ListingTitle { get; set; }
+    public string? ListingImageUrl { get; set; }
 }
