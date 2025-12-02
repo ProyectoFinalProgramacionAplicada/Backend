@@ -25,6 +25,7 @@ builder.Services.AddScoped<IGeoService, GeoService>();
 builder.Services.AddScoped<IStorageService, AzureStorageService>();
 builder.Services.AddScoped<IWalletService, WalletService>();
 builder.Services.AddScoped<IP2POrderService, P2POrderService>();
+builder.Services.AddHttpClient<IAiService, GeminiService>();
 
 
 // Registrar servicio BinanceP2PService para inyección de dependencias
