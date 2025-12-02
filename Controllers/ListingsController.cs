@@ -149,12 +149,19 @@ public class ListingsController(
 
     [HttpPost]
     [Authorize]
-    // MODIFICADO: Añadido [FromForm] para aceptar 'multipart/form-data' (archivos)
     public async Task<IActionResult> Create([FromForm] ListingCreateDto dto)
     {
         var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
-        // --- AÑADIDO: Lógica de carga de archivos ---
+        // --- VALIDACIÓN DE COORDENADAS (¡CRÍTICO!) ---
+        // SQL lanza error si la latitud pasa de 90 o longitud de 180.
+        if (dto.Latitude < -90 || dto.Latitude > 90)
+            return BadRequest("La Latitud debe estar entre -90 y 90.");
+        
+        if (dto.Longitude < -180 || dto.Longitude > 180)
+            return BadRequest("La Longitud debe estar entre -180 y 180.");
+
+        // --- Lógica de carga de archivos ---
         if (dto.ImageFile == null || dto.ImageFile.Length == 0)
         {
             return BadRequest("No se ha proporcionado un archivo de imagen.");
@@ -163,15 +170,22 @@ public class ListingsController(
         string imageUrl;
         try
         {
-            // Usamos el servicio para subir el archivo. "listings" es el nombre del contenedor.
             imageUrl = await storageService.UploadFileAsync(dto.ImageFile, "listings");
         }
         catch (Exception ex)
         {
-            // Manejo de error si la subida a Azure falla
             return StatusCode(500, $"Error interno al subir la imagen: {ex.Message}");
         }
-        // --- FIN DE LA NUEVA LÓGICA ---
+
+        // --- CREACIÓN DEL PUNTO GEOGRÁFICO ---
+        var locationPoint = geoService.CreatePoint(dto.Latitude, dto.Longitude);
+        
+        // ¡FIX IMPORTANTE!: Aseguramos que el SRID sea 4326 (Estándar GPS para SQL Server)
+        // Si tu GeoService ya lo hace, esto no daña nada, pero si no lo hace, esto arregla el crash.
+        if (locationPoint.SRID != 4326)
+        {
+            locationPoint.SRID = 4326; 
+        }
 
         var listing = new Listing
         {
@@ -179,20 +193,18 @@ public class ListingsController(
             Title = dto.Title,
             Description = dto.Description,
             TrueCoinValue = dto.TrueCoinValue,
-            Lat = dto.Latitude,
+            Lat = dto.Latitude, // Guardamos el valor crudo por si acaso
             Lng = dto.Longitude,
             
-            // MODIFICADO: Usamos la URL devuelta por el servicio de almacenamiento
             ImageUrl = imageUrl, 
             
-            Location = geoService.CreatePoint(dto.Latitude, dto.Longitude),
+            Location = locationPoint, // Ahora lleva el SRID correcto
             IsPublished = true
         };
 
         db.Listings.Add(listing);
-        await db.SaveChangesAsync();
+        await db.SaveChangesAsync(); // <-- Aquí es donde explotaba antes
         
-        // CONVENCIÓN: Devolver un DTO en lugar de la entidad de DB
         var responseDto = new ListingDto 
         {
             Id = listing.Id,

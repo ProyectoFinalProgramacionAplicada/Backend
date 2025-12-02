@@ -6,6 +6,7 @@ using System.Text;
 using TruekAppAPI.Data;
 using TruekAppAPI.Services;
 using System.Text.Json.Serialization; // 👈 necesario para ReferenceHandler
+using TruekAppAPI.Hubs; 
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -115,22 +116,22 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
+builder.Services.AddSignalR();
+
 // -------------------------------
 // 🚀 Construcción del app
 // -------------------------------
 var app = builder.Build();
-
+var cultureInfo = new System.Globalization.CultureInfo("en-US");
+System.Globalization.CultureInfo.DefaultThreadCurrentCulture = cultureInfo;
+System.Globalization.CultureInfo.DefaultThreadCurrentUICulture = cultureInfo;
 // Middleware pipeline
 app.UseSwagger(); 
 app.UseSwaggerUI();
-
 app.UseCors("AllowAll");
-
 app.UseRouting();
-
 app.UseAuthentication();
 app.UseAuthorization();
-
 app.MapControllers();
-
+app.MapHub<ChatHub>("/chatHub");
 app.Run();

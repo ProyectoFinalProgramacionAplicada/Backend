@@ -5,14 +5,26 @@ using TruekAppAPI.Data;
 using TruekAppAPI.DTO.Trade;
 using TruekAppAPI.Models;
 using System.Security.Claims;
+using Microsoft.AspNetCore.SignalR; // Importante
+using TruekAppAPI.Hubs;             // Importante
 
 namespace TruekAppAPI.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
-public class TradesController(AppDbContext db) : ControllerBase
+public class TradesController : ControllerBase
 {
+    private readonly AppDbContext db;
+    private readonly IHubContext<ChatHub> _hubContext; // 1. Declarar el Hub
+
+    // 2. Inyectar en el constructor
+    public TradesController(AppDbContext db, IHubContext<ChatHub> hubContext)
+    {
+        this.db = db;
+        _hubContext = hubContext;
+    }
+
     [HttpPost]
     public async Task<IActionResult> CreateTrade(TradeCreateDto dto)
     {
@@ -21,11 +33,9 @@ public class TradesController(AppDbContext db) : ControllerBase
             .FirstOrDefaultAsync(l => l.Id == dto.TargetListingId);
         if (targetListing == null) return NotFound("Publicación no encontrada.");
 
-        // ✅ No permitir trades consigo mismo
         if (requesterId == targetListing.OwnerUserId)
             return BadRequest("No puedes hacer una oferta sobre tu propia publicación.");
 
-        // ✅ Evitar trades duplicados
         var existingTrade = await db.Trades
             .FirstOrDefaultAsync(t =>
                 t.RequesterUserId == requesterId &&
@@ -72,8 +82,7 @@ public class TradesController(AppDbContext db) : ControllerBase
     {
         var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
-        var trade = await db.Trades
-            .FirstOrDefaultAsync(t => t.Id == id);
+        var trade = await db.Trades.FirstOrDefaultAsync(t => t.Id == id);
 
         if (trade == null) return NotFound("Trueque no encontrado.");
 
@@ -120,16 +129,11 @@ public class TradesController(AppDbContext db) : ControllerBase
         return NoContent();
     }
 
-    // ==========================================
-    // POST /api/Trades/{id}/complete
-    // Completar trueque (solo el vendedor)
-    // ==========================================
     [HttpPost("{id}/complete")]
     public async Task<IActionResult> CompleteTrade(int id)
     {
         var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
-        // 🔧 CAMBIO: Usar 'db' en lugar de '_db'
         var trade = await db.Trades
             .Include(t => t.TargetListing)
             .FirstOrDefaultAsync(t => t.Id == id);
@@ -144,9 +148,8 @@ public class TradesController(AppDbContext db) : ControllerBase
         if (trade.Status == TradeStatus.Completed)
             return BadRequest("Este trueque ya está finalizado.");
 
-        // ✅ LÓGICA DE FINALIZACIÓN
         trade.Status = TradeStatus.Completed;
-        trade.CompletedAt = DateTime.UtcNow; // 🆕 Registrar fecha de finalización
+        trade.CompletedAt = DateTime.UtcNow;
         
         if (trade.TargetListing != null)
         {
@@ -154,7 +157,6 @@ public class TradesController(AppDbContext db) : ControllerBase
             trade.TargetListing.IsPublished = false;
         }
 
-        // 🔧 CAMBIO: Usar 'db' en lugar de '_db'
         var otherTrades = await db.Trades
             .Where(t => t.TargetListingId == trade.TargetListingId && t.Id != trade.Id && t.Status == TradeStatus.Pending)
             .ToListAsync();
@@ -164,7 +166,6 @@ public class TradesController(AppDbContext db) : ControllerBase
             other.Status = TradeStatus.Cancelled;
         }
 
-        // 🔧 CAMBIO: Usar 'db' en lugar de '_db'
         await db.SaveChangesAsync();
         return Ok(new { message = "Trueque finalizado con éxito." });
     }
@@ -196,20 +197,26 @@ public class TradesController(AppDbContext db) : ControllerBase
         return Ok(messages);
     }
 
+    // ==========================================
+    // 3. Método SendMessage ACTUALIZADO con SignalR
+    // ==========================================
     [HttpPost("{id}/messages")]
     public async Task<IActionResult> SendMessage(int id, [FromBody] string text)
     {
         var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var userName = User.FindFirstValue(ClaimTypes.Name) ?? "Usuario"; // Intentamos obtener el nombre del token
+
         var trade = await db.Trades.FindAsync(id);
         if (trade == null) return NotFound();
 
+        // Validación anti-spam
         var lastMessage = await db.TradeMessages
             .Where(m => m.TradeId == id && m.SenderUserId == userId)
             .OrderByDescending(m => m.CreatedAt)
             .FirstOrDefaultAsync();
 
-        if (lastMessage != null && (DateTime.UtcNow - lastMessage.CreatedAt).TotalSeconds < 5)
-            return BadRequest("No puedes enviar mensajes idénticos tan seguido.");
+        if (lastMessage != null && (DateTime.UtcNow - lastMessage.CreatedAt).TotalSeconds < 2) // Reducido a 2s para chat fluido
+            return BadRequest("Espera un momento antes de enviar otro mensaje.");
 
         var message = new TradeMessage
         {
@@ -221,6 +228,22 @@ public class TradesController(AppDbContext db) : ControllerBase
 
         db.TradeMessages.Add(message);
         await db.SaveChangesAsync();
+
+        // --- NOTIFICACIÓN EN TIEMPO REAL (SignalR) ---
+        var msgDto = new 
+        {
+            Id = message.Id,
+            TradeId = message.TradeId,
+            SenderUserId = message.SenderUserId,
+            Text = message.Text,
+            CreatedAt = message.CreatedAt,
+            SenderUserName = userName // Enviamos el nombre para que el cliente no tenga que buscarlo
+        };
+
+        // Enviamos el mensaje al grupo del chat específico
+        await _hubContext.Clients.Group(id.ToString()).SendAsync("ReceiveMessage", msgDto);
+        // ----------------------------------------------
+
         return CreatedAtAction(nameof(SendMessage), new { message.Id }, message);
     }
 
@@ -230,7 +253,6 @@ public class TradesController(AppDbContext db) : ControllerBase
         var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
         var trades = await db.Trades
-            // EF Core hace el join automáticamente al acceder a las propiedades de navegación en el Select
             .Where(t => t.RequesterUserId == userId || t.OwnerUserId == userId)
             .OrderByDescending(t => t.CreatedAt)
             .Select(t => new TradeDto
@@ -248,7 +270,7 @@ public class TradesController(AppDbContext db) : ControllerBase
                 ListingOwnerId = t.OwnerUserId,
                 InitiatorUserId = t.RequesterUserId,
             
-                // --- AGREGAR ESTAS ASIGNACIONES ---
+                // Mapeos visuales (Fotos, Nombres y Producto)
                 RequesterAvatarUrl = t.RequesterUser.AvatarUrl,
                 OwnerAvatarUrl = t.OwnerUser.AvatarUrl,
                 RequesterName = t.RequesterUser.DisplayName,
