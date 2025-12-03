@@ -7,6 +7,7 @@ using TruekAppAPI.Models;
 using System.Security.Claims;
 using Microsoft.AspNetCore.SignalR; // Importante
 using TruekAppAPI.Hubs;             // Importante
+using TruekAppAPI.Services;         // 👈 para IWalletService
 
 namespace TruekAppAPI.Controllers;
 
@@ -16,13 +17,18 @@ namespace TruekAppAPI.Controllers;
 public class TradesController : ControllerBase
 {
     private readonly AppDbContext db;
-    private readonly IHubContext<ChatHub> _hubContext; // 1. Declarar el Hub
+    private readonly IHubContext<ChatHub> _hubContext;
+    private readonly IWalletService _walletService; // 👈 nuevo campo
 
-    // 2. Inyectar en el constructor
-    public TradesController(AppDbContext db, IHubContext<ChatHub> hubContext)
+    // Constructor con Hub + WalletService
+    public TradesController(
+        AppDbContext db,
+        IHubContext<ChatHub> hubContext,
+        IWalletService walletService)
     {
         this.db = db;
         _hubContext = hubContext;
+        _walletService = walletService;
     }
 
     [HttpPost]
@@ -136,37 +142,90 @@ public class TradesController : ControllerBase
 
         var trade = await db.Trades
             .Include(t => t.TargetListing)
+            .Include(t => t.RequesterUser) // comprador
+            .Include(t => t.OwnerUser).Include(trade => trade.OfferedListing) // vendedor
             .FirstOrDefaultAsync(t => t.Id == id);
 
         if (trade == null) return NotFound("Trueque no encontrado.");
 
         if (trade.OwnerUserId != userId)
-        {
             return Forbid("Solo el dueño del producto puede finalizar el trueque.");
-        }
 
         if (trade.Status == TradeStatus.Completed)
             return BadRequest("Este trueque ya está finalizado.");
 
+        if (trade.Status == TradeStatus.Cancelled)
+            return BadRequest("No se puede completar un trueque cancelado.");
+
+        // Cálculo neto (comprador vs vendedor)
+        decimal offered   = (decimal)(trade.OfferedTrueCoins   ?? 0);
+        decimal requested = (decimal)(trade.RequestedTrueCoins ?? 0);
+        decimal net = offered - requested;
+        // net > 0 => comprador paga al vendedor
+        // net < 0 => vendedor paga al comprador
+        // net = 0 => sin movimiento
+
+        // 1) Transferencia de TrueCoins si aplica
+        try
+        {
+            if (net > 0)
+            {
+                // Comprador -> Vendedor
+                await _walletService.ApplyTradeTransferAsync(
+                    fromUserId: trade.RequesterUserId,
+                    toUserId: trade.OwnerUserId,
+                    amount: net,
+                    tradeId: trade.Id
+                );
+            }
+            else if (net < 0)
+            {
+                // Vendedor -> Comprador (cambio)
+                decimal refund = -net;
+                await _walletService.ApplyTradeTransferAsync(
+                    fromUserId: trade.OwnerUserId,
+                    toUserId: trade.RequesterUserId,
+                    amount: refund,
+                    tradeId: trade.Id
+                );
+            }
+        }
+        catch (InvalidOperationException ex)
+        {
+            // Por ejemplo: saldo insuficiente
+            return BadRequest(ex.Message);
+        }
+
+        // 2) Marcar trade como completado y cerrar otros
         trade.Status = TradeStatus.Completed;
         trade.CompletedAt = DateTime.UtcNow;
-        
+
         if (trade.TargetListing != null)
         {
             trade.TargetListing.IsAvailable = false;
             trade.TargetListing.IsPublished = false;
         }
+        
+        if (trade.OfferedListing != null)
+        {
+            trade.OfferedListing.IsAvailable = false;
+            trade.OfferedListing.IsPublished = false;
+        }
+            
 
         var otherTrades = await db.Trades
-            .Where(t => t.TargetListingId == trade.TargetListingId && t.Id != trade.Id && t.Status == TradeStatus.Pending)
+            .Where(t => t.TargetListingId == trade.TargetListingId
+                        && t.Id != trade.Id
+                        && t.Status == TradeStatus.Pending)
             .ToListAsync();
-        
+
         foreach (var other in otherTrades)
         {
             other.Status = TradeStatus.Cancelled;
         }
 
         await db.SaveChangesAsync();
+
         return Ok(new { message = "Trueque finalizado con éxito." });
     }
 
@@ -198,13 +257,13 @@ public class TradesController : ControllerBase
     }
 
     // ==========================================
-    // 3. Método SendMessage ACTUALIZADO con SignalR
+    // Método SendMessage con SignalR
     // ==========================================
     [HttpPost("{id}/messages")]
     public async Task<IActionResult> SendMessage(int id, [FromBody] string text)
     {
         var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-        var userName = User.FindFirstValue(ClaimTypes.Name) ?? "Usuario"; // Intentamos obtener el nombre del token
+        var userName = User.FindFirstValue(ClaimTypes.Name) ?? "Usuario";
 
         var trade = await db.Trades.FindAsync(id);
         if (trade == null) return NotFound();
@@ -215,7 +274,7 @@ public class TradesController : ControllerBase
             .OrderByDescending(m => m.CreatedAt)
             .FirstOrDefaultAsync();
 
-        if (lastMessage != null && (DateTime.UtcNow - lastMessage.CreatedAt).TotalSeconds < 2) // Reducido a 2s para chat fluido
+        if (lastMessage != null && (DateTime.UtcNow - lastMessage.CreatedAt).TotalSeconds < 2)
             return BadRequest("Espera un momento antes de enviar otro mensaje.");
 
         var message = new TradeMessage
@@ -229,7 +288,6 @@ public class TradesController : ControllerBase
         db.TradeMessages.Add(message);
         await db.SaveChangesAsync();
 
-        // --- NOTIFICACIÓN EN TIEMPO REAL (SignalR) ---
         var msgDto = new 
         {
             Id = message.Id,
@@ -237,12 +295,10 @@ public class TradesController : ControllerBase
             SenderUserId = message.SenderUserId,
             Text = message.Text,
             CreatedAt = message.CreatedAt,
-            SenderUserName = userName // Enviamos el nombre para que el cliente no tenga que buscarlo
+            SenderUserName = userName
         };
 
-        // Enviamos el mensaje al grupo del chat específico
         await _hubContext.Clients.Group(id.ToString()).SendAsync("ReceiveMessage", msgDto);
-        // ----------------------------------------------
 
         return CreatedAtAction(nameof(SendMessage), new { message.Id }, message);
     }
@@ -275,7 +331,7 @@ public class TradesController : ControllerBase
                 OwnerAvatarUrl = t.OwnerUser.AvatarUrl,
                 RequesterName = t.RequesterUser.DisplayName,
                 OwnerName = t.OwnerUser.DisplayName,
-                ListingTitle = t.TargetListing.Title, 
+                ListingTitle = t.TargetListing.Title,
                 ListingImageUrl = t.TargetListing.ImageUrl
             })
             .ToListAsync();
