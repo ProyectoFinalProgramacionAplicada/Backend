@@ -20,4 +20,6 @@ public class Trade : BaseEntity
     public double? RequestedTrueCoins { get; set; } // TrueCoins que pide el solicitante para compensar diferencia
     
     public DateTime? CompletedAt { get; set; }
+    public int? LastOfferByUserId { get; set; }
+
 }
