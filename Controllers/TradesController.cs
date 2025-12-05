@@ -89,7 +89,7 @@ public class TradesController : ControllerBase
             await db.SaveChangesAsync();
         }
 
-        return CreatedAtAction(nameof(CreateTrade), new { trade.Id }, trade);
+        return Ok(trade);
     }
 
     [HttpPut("{id}")]
