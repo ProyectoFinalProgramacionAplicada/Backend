@@ -55,8 +55,12 @@ public class TradesController : ControllerBase
                 t.TargetListingId == targetListing.Id &&
                 (t.Status == TradeStatus.Pending || t.Status == TradeStatus.Accepted));
 
+        // Si ya existe un trueque similar, devuelvo ese DTO
         if (existingTrade != null)
-            return Ok(existingTrade);
+        {
+            var existingDto = await ProjectTradeToDto(existingTrade.Id);
+            return Ok(existingDto);
+        }
 
         var trade = new Trade
         {
@@ -68,8 +72,6 @@ public class TradesController : ControllerBase
             Status             = TradeStatus.Pending,
             OfferedTrueCoins   = dto.OfferedTrueCoins,
             RequestedTrueCoins = dto.RequestedTrueCoins,
-
-            // 👇 El iniciador es quien hace la PRIMERA oferta
             LastOfferByUserId  = requesterId
         };
 
@@ -89,8 +91,42 @@ public class TradesController : ControllerBase
             await db.SaveChangesAsync();
         }
 
-        return Ok(trade);
+        // Proyectamos a DTO para evitar ciclos de navegación al serializar
+        var tradeDto = await ProjectTradeToDto(trade.Id);
+
+        return Ok(tradeDto);
     }
+
+    // Helper privado dentro del mismo controller
+    private async Task<TradeDto> ProjectTradeToDto(int tradeId)
+    {
+        return await db.Trades
+            .Where(t => t.Id == tradeId)
+            .Select(t => new TradeDto
+            {
+                Id                 = t.Id,
+                RequesterUserId    = t.RequesterUserId,
+                OwnerUserId        = t.OwnerUserId,
+                TargetListingId    = t.TargetListingId,
+                OfferedListingId   = t.OfferedListingId,
+                Status             = t.Status,
+                Message            = t.Message,
+                CreatedAt          = t.CreatedAt,
+                OfferedTrueCoins   = t.OfferedTrueCoins,
+                RequestedTrueCoins = t.RequestedTrueCoins,
+                ListingOwnerId     = t.OwnerUserId,
+                InitiatorUserId    = t.RequesterUserId,
+                RequesterAvatarUrl = t.RequesterUser.AvatarUrl,
+                OwnerAvatarUrl     = t.OwnerUser.AvatarUrl,
+                RequesterName      = t.RequesterUser.DisplayName,
+                OwnerName          = t.OwnerUser.DisplayName,
+                ListingTitle       = t.TargetListing.Title,
+                ListingImageUrl    = t.TargetListing.ImageUrl,
+                LastOfferByUserId  = t.LastOfferByUserId
+            })
+            .FirstAsync();
+    }
+
 
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdateTrade(int id, TradeUpdateDto dto)
