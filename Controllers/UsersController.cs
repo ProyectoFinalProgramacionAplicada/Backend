@@ -27,20 +27,23 @@ public class UsersController(
         var user = await db.Users.FindAsync(id);
         if (user == null) return NotFound();
 
-        // ✅ FIX: Validación con null-check
-        var phoneExists = await db.Users
-            .AnyAsync(u => u.Phone != null && u.Phone == dto.Phone && u.Id != id);
-    
-        if (phoneExists)
+        // ✅ Validar teléfono duplicado (solo si se proporciona y es diferente al actual)
+        if (!string.IsNullOrEmpty(dto.Phone) && dto.Phone != user.Phone)
         {
-            return BadRequest(new { message = "Este número de teléfono ya está registrado." });
+            var phoneExists = await db.Users
+                .AnyAsync(u => u.Phone != null && u.Phone == dto.Phone && u.Id != id);
+    
+            if (phoneExists)
+            {
+                return BadRequest(new { message = "Este número de teléfono ya está registrado." });
+            }
         }
 
         user.DisplayName = dto.DisplayName;
         user.Phone = dto.Phone;
-        
+    
         await db.SaveChangesAsync();
-        
+    
         return Ok(new { 
             message = "Perfil actualizado", 
             user = new { user.DisplayName, user.Phone, user.AvatarUrl } 

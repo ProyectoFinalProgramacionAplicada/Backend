@@ -34,6 +34,16 @@ namespace TruekAppAPI.Controllers
         {
             if (await _db.Users.AnyAsync(x => x.Email == dto.Email))
                 return BadRequest("El correo ya está registrado.");
+            
+            // Validar teléfono duplicado
+            if (!string.IsNullOrEmpty(dto.Phone))
+            {
+                var phoneExists = await _db.Users
+                    .AnyAsync(u => u.Phone != null && u.Phone == dto.Phone);
+
+                if (phoneExists)
+                    return BadRequest(new { message = "El número de teléfono ya está registrado." });
+            }
 
             var user = new User
             {
