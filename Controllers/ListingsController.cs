@@ -270,27 +270,21 @@ public class ListingsController(
     {
         var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
         var listing = await db.Listings.FindAsync(id);
-        if (listing == null) return NotFound();
-        if (listing.OwnerUserId != userId) return Forbid();
 
-        // --- AÑADIDO: Borrar el archivo asociado de Blob Storage ---
-        if (!string.IsNullOrEmpty(listing.ImageUrl))
-        {
-            try
-            {
-                await storageService.DeleteFileAsync(listing.ImageUrl);
-            }
-            catch (Exception ex)
-            {
-                // No bloquear la eliminación de la DB si falla el borrado del archivo,
-                // pero se debe registrar (logging).
-                Console.WriteLine($"Error al eliminar archivo de storage: {ex.Message}");
-            }
-        }
-        // --- FIN DE LA NUEVA LÓGICA ---
+        if (listing == null)
+            return NotFound();
 
-        db.Listings.Remove(listing);
+        if (listing.OwnerUserId != userId)
+            return Forbid();
+
+        // --- SOLO CAMBIAR ESTADO ---
+        listing.IsPublished = false;   // deja de mostrarse en el frontend
+        listing.IsAvailable = false;   // opcional: evita que entren en trades
+        // ----------------------------
+
         await db.SaveChangesAsync();
+
         return NoContent();
     }
+
 }
