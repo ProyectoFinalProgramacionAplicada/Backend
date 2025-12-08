@@ -64,7 +64,7 @@ public class P2POrderService : IP2POrderService
     public async Task<P2POrderDto> TakeAsync(int orderId, int takerUserId)
     {
         var order = await _db.P2POrders.FindAsync(orderId)
-            ?? throw new InvalidOperationException("Order not found");
+                    ?? throw new InvalidOperationException("Order not found");
 
         if (order.Status != P2POrderStatus.Pending)
             throw new InvalidOperationException("Order is not pending");
@@ -72,6 +72,22 @@ public class P2POrderService : IP2POrderService
         if (order.CreatorUserId == takerUserId)
             throw new InvalidOperationException("You cannot take your own order");
 
+        // 🔹 Validar saldo del taker cuando la orden es de tipo Depósito
+        // En este caso el taker es el vendedor de TrueCoins.
+        if (order.Type == P2POrderType.Deposit)
+        {
+            var amountTrueCoins = (decimal)order.AmountTrueCoins;
+
+            if (amountTrueCoins <= 0)
+                throw new InvalidOperationException("Invalid TrueCoins amount for this order");
+
+            var takerBalance = await _walletService.GetTrueCoinBalanceAsync(takerUserId);
+
+            if (takerBalance < amountTrueCoins)
+                throw new InvalidOperationException("Insufficient TrueCoins balance to take this order");
+        }
+
+        // Si pasa todas las validaciones, se matchea la orden
         order.CounterpartyUserId = takerUserId;
         order.Status = P2POrderStatus.Matched;
         order.UpdatedAt = DateTime.UtcNow;
@@ -79,6 +95,7 @@ public class P2POrderService : IP2POrderService
         await _db.SaveChangesAsync();
         return Map(order);
     }
+
 
     public async Task<P2POrderDto> MarkPaidAsync(int orderId, int userId)
     {

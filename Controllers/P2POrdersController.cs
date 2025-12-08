@@ -67,9 +67,19 @@ public class P2POrdersController : ControllerBase
     public async Task<ActionResult<P2POrderDto>> Take(int id)
     {
         var userId = GetCurrentUserId();
-        var result = await _service.TakeAsync(id, userId);
-        return Ok(result);
+
+        try
+        {
+            var result = await _service.TakeAsync(id, userId);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            // 400 con el mensaje de dominio (por ejemplo "Insufficient TrueCoins balance...")
+            return BadRequest(ex.Message);
+        }
     }
+
 
     // ==========================================
     // PATCH /api/P2POrders/{id}/paid

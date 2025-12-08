@@ -15,6 +15,15 @@ namespace TruekAppAPI.Services
             _db = db;
         }
 
+        public async Task<decimal> GetTrueCoinBalanceAsync(int userId)
+        {
+            var user = await _db.Users
+                           .AsNoTracking()
+                           .FirstOrDefaultAsync(u => u.Id == userId)
+                       ?? throw new InvalidOperationException("User not found");
+
+            return user.TrueCoinBalance;
+        }
         // ======================================================
         //  Transferencia interna entre usuarios (no P2P formal)
         // ======================================================
@@ -26,12 +35,12 @@ namespace TruekAppAPI.Services
             using var tx = await _db.Database.BeginTransactionAsync();
 
             var fromUser = await _db.Users
-                .FirstOrDefaultAsync(u => u.Id == fromUserId)
-                ?? throw new InvalidOperationException("From user not found");
+                               .FirstOrDefaultAsync(u => u.Id == fromUserId)
+                           ?? throw new InvalidOperationException("From user not found");
 
             var toUser = await _db.Users
-                .FirstOrDefaultAsync(u => u.Id == toUserId)
-                ?? throw new InvalidOperationException("To user not found");
+                             .FirstOrDefaultAsync(u => u.Id == toUserId)
+                         ?? throw new InvalidOperationException("To user not found");
 
             if (fromUser.TrueCoinBalance < amount)
                 throw new InvalidOperationException("Insufficient balance");

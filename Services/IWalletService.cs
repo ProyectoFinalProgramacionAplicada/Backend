@@ -11,5 +11,7 @@ public interface IWalletService
     Task ApplyP2PWithdrawAsync(int sellerUserId, int buyerUserId, decimal amountTrueCoins, int p2pOrderId);
     
     Task ApplyTradeTransferAsync(int fromUserId, int toUserId, decimal amount, int tradeId);
+    
+    Task<decimal> GetTrueCoinBalanceAsync(int userId);
 
 }
